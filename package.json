@@ -5,8 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js",
-    "export-session": "node scripts/export-session.js"
+    "dev": "node server.js"
   },
   "keywords": [],
   "author": "",

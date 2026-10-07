@@ -12,8 +12,6 @@ const {
   Browsers
 } = require('@whiskeysockets/baileys');
 
-const zlib = require('zlib');
-
 const PORT = process.env.PORT || 3030;
 const DATA_DIR = path.join(__dirname, 'data');
 const AUTH_DIR = path.join(DATA_DIR, 'auth_info_baileys');
@@ -24,21 +22,6 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
 if (!fs.existsSync(SCHEDULES_FILE)) {
   fs.writeFileSync(SCHEDULES_FILE, JSON.stringify([], null, 2), 'utf-8');
-}
-
-// Restore session from Cloud Environment Variable if provided and auth dir is empty
-if (process.env.WA_SESSION_BASE64 && fs.readdirSync(AUTH_DIR).length === 0) {
-  try {
-    const buffer = Buffer.from(process.env.WA_SESSION_BASE64, 'base64');
-    const decompressed = zlib.gunzipSync(buffer).toString('utf-8');
-    const files = JSON.parse(decompressed);
-    for (const [filename, content] of Object.entries(files)) {
-      fs.writeFileSync(path.join(AUTH_DIR, filename), content, 'utf-8');
-    }
-    console.log('[Server] Successfully restored WhatsApp session from WA_SESSION_BASE64 environment variable!');
-  } catch (err) {
-    console.error('[Server] Failed to restore session from WA_SESSION_BASE64:', err);
-  }
 }
 
 const app = express();
@@ -579,8 +562,8 @@ app.delete('/api/messages/:id', (req, res) => {
   res.json({ success: true, message: 'Message removed', item: removed });
 });
 
-// Start Express server and connect WhatsApp
-app.listen(PORT, () => {
-  console.log(`[Server] WhatsApp Message Scheduler listening on http://localhost:${PORT}`);
+// Start Express server and connect WhatsApp (Bound strictly to 127.0.0.1 for maximum privacy)
+app.listen(PORT, '127.0.0.1', () => {
+  console.log(`[Server] WhatsApp Message Scheduler listening securely on http://127.0.0.1:${PORT}`);
   initWhatsApp();
 });
