@@ -21,8 +21,8 @@ if lsof -i :3030 >/dev/null 2>&1; then
     exit 0
 fi
 
-echo " [→] Starting WhatsApp Scheduler server on http://localhost:3030..."
-node server.js &
+echo " [→] Starting WhatsApp Scheduler server with sleep prevention (caffeinate)..."
+caffeinate -s -i node server.js &
 SERVER_PID=$!
 
 # Wait for server to become responsive

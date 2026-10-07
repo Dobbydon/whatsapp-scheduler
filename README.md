@@ -55,3 +55,34 @@ The server will start on **`http://localhost:3030`**.
 2. Write your message or pick a prebuilt template.
 3. Choose your target date and time.
 4. Click **Schedule Message**!
+
+---
+
+## 🔒 100% Privacy & Security Guarantee
+
+- **Zero Cloud / Zero Third-Party Servers**: No code or data ever leaves your computer to any external server or analytics service.
+- **Strictly Localhost**: The web server binds strictly to `127.0.0.1`, meaning no device on your Wi-Fi or local network can access it.
+- **Official End-to-End Encryption**: All messages travel directly between your Mac and WhatsApp's official servers via the Noise Protocol / Signal Protocol.
+- **Isolated Storage**: All session keys and scheduled queues are stored locally inside `./data/` and excluded from git.
+
+---
+
+## 🌙 Delivering Messages When Laptop Lid is Closed (100% Locally)
+
+To keep your scheduled messages delivering on time when your MacBook lid is closed without using any cloud servers:
+
+### Option 1: Built-in macOS Setting (Recommended)
+1. Keep your MacBook **connected to power (charger)**.
+2. In Terminal, run:
+   ```bash
+   sudo pmset -a disablesleep 1
+   ```
+   *Your Mac will keep the processor and Wi-Fi active with the lid closed (display turns off to save power).*
+3. To re-enable normal sleep behavior anytime:
+   ```bash
+   sudo pmset -a disablesleep 0
+   ```
+
+### Option 2: Use Amphetamine (Free on Mac App Store)
+Install **Amphetamine**, set a session with *"Allow system sleep when display is closed"* unchecked, and keep your MacBook plugged into power.
+
