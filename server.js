@@ -16,12 +16,16 @@ const PORT = process.env.PORT || 3030;
 const DATA_DIR = path.join(__dirname, 'data');
 const AUTH_DIR = path.join(DATA_DIR, 'auth_info_baileys');
 const SCHEDULES_FILE = path.join(DATA_DIR, 'schedules.json');
+const CONTACTS_FILE = path.join(DATA_DIR, 'contacts.json');
 
 // Ensure directories exist
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
 if (!fs.existsSync(SCHEDULES_FILE)) {
   fs.writeFileSync(SCHEDULES_FILE, JSON.stringify([], null, 2), 'utf-8');
+}
+if (!fs.existsSync(CONTACTS_FILE)) {
+  fs.writeFileSync(CONTACTS_FILE, JSON.stringify([], null, 2), 'utf-8');
 }
 
 const app = express();
@@ -68,6 +72,80 @@ function saveSchedules(schedules) {
   } catch (e) {
     console.error('Error writing schedules.json:', e);
   }
+}
+
+// Contacts Management & Search Cache
+let contactsMap = new Map();
+let saveContactsTimeout = null;
+
+function loadContacts() {
+  contactsMap.clear();
+  if (fs.existsSync(CONTACTS_FILE)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(CONTACTS_FILE, 'utf-8'));
+      for (const c of data) {
+        if (c.jid) contactsMap.set(c.jid, c);
+      }
+    } catch (e) {
+      console.error('Error reading contacts.json:', e);
+    }
+  }
+
+  // Auto-populate from schedules.json (ensures past contacts like Anu, Sajal Sir are instantly available)
+  const schedules = loadSchedules();
+  for (const s of schedules) {
+    if (s.jid) {
+      const existing = contactsMap.get(s.jid);
+      contactsMap.set(s.jid, {
+        jid: s.jid,
+        name: s.recipientName || existing?.name || s.recipient,
+        phone: s.recipient,
+        isGroup: s.jid.endsWith('@g.us'),
+        lastUsed: s.sentAt || s.createdAt || existing?.lastUsed || new Date().toISOString()
+      });
+    }
+  }
+
+  saveContactsDirect();
+}
+
+function saveContactsDirect() {
+  try {
+    const list = Array.from(contactsMap.values());
+    fs.writeFileSync(CONTACTS_FILE, JSON.stringify(list, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error saving contacts.json:', e);
+  }
+}
+
+function saveContacts() {
+  if (saveContactsTimeout) clearTimeout(saveContactsTimeout);
+  saveContactsTimeout = setTimeout(saveContactsDirect, 1000);
+}
+
+function upsertContact(c) {
+  if (!c) return;
+  const targetJid = c.jid || c.id;
+  if (!targetJid || typeof targetJid !== 'string') return;
+  if (targetJid === 'status@broadcast' || targetJid.endsWith('@newsletter')) return;
+
+  const isGroup = targetJid.endsWith('@g.us');
+  const rawDigits = targetJid.split('@')[0].replace(/[^0-9]/g, '');
+  const phone = c.phone || (rawDigits ? `+${rawDigits}` : null);
+  const name = (c.name || c.notify || c.verifiedName || c.pushName || '').trim();
+
+  const existing = contactsMap.get(targetJid) || {};
+  const finalName = name || existing.name || (phone || targetJid);
+
+  contactsMap.set(targetJid, {
+    jid: targetJid,
+    name: finalName,
+    phone: phone || existing.phone,
+    isGroup,
+    lastUsed: c.lastUsed || existing.lastUsed || new Date().toISOString()
+  });
+
+  saveContacts();
 }
 
 // Format Phone Number to WhatsApp JID
@@ -173,6 +251,47 @@ async function initWhatsApp(forceNew = false) {
             isReconnecting = false;
             initWhatsApp();
           }, 4000);
+        }
+      }
+    });
+
+    // Synchronize and update contacts, chats, and recent conversations
+    sock.ev.on('contacts.upsert', (contacts) => {
+      for (const c of contacts) upsertContact(c);
+    });
+
+    sock.ev.on('contacts.update', (updates) => {
+      for (const u of updates) upsertContact(u);
+    });
+
+    sock.ev.on('chats.upsert', (chats) => {
+      for (const ch of chats) {
+        if (ch.id) upsertContact({ id: ch.id, name: ch.name });
+      }
+    });
+
+    sock.ev.on('messaging-history.set', ({ chats, contacts, messages }) => {
+      if (contacts) {
+        for (const c of contacts) upsertContact(c);
+      }
+      if (chats) {
+        for (const ch of chats) {
+          if (ch.id) upsertContact({ id: ch.id, name: ch.name });
+        }
+      }
+      if (messages) {
+        for (const m of messages) {
+          if (m.key?.remoteJid && m.pushName) {
+            upsertContact({ id: m.key.remoteJid, pushName: m.pushName });
+          }
+        }
+      }
+    });
+
+    sock.ev.on('messages.upsert', ({ messages }) => {
+      for (const m of messages) {
+        if (m.key?.remoteJid && m.pushName) {
+          upsertContact({ id: m.key.remoteJid, pushName: m.pushName });
         }
       }
     });
@@ -386,6 +505,59 @@ app.post('/api/reconnect', async (req, res) => {
   }
 });
 
+// Search and retrieve cached WhatsApp contacts & recent chats
+app.get('/api/contacts', (req, res) => {
+  const q = (req.query.q || '').trim().toLowerCase();
+  const contacts = Array.from(contactsMap.values());
+
+  let results = contacts;
+  if (q) {
+    const qClean = q.replace(/[^0-9a-z]/g, '');
+    results = contacts.filter(c => {
+      const name = (c.name || '').toLowerCase();
+      const phone = (c.phone || '').replace(/[^0-9]/g, '');
+      const jid = (c.jid || '').toLowerCase();
+      return name.includes(q) || (qClean.length > 0 && phone.includes(qClean)) || jid.includes(q);
+    });
+  }
+
+  // Sort: recently used first, and prefix match higher
+  results.sort((a, b) => {
+    if (q) {
+      const aStarts = (a.name || '').toLowerCase().startsWith(q);
+      const bStarts = (b.name || '').toLowerCase().startsWith(q);
+      if (aStarts && !bStarts) return -1;
+      if (!aStarts && bStarts) return 1;
+    }
+    const aTime = a.lastUsed ? new Date(a.lastUsed).getTime() : 0;
+    const bTime = b.lastUsed ? new Date(b.lastUsed).getTime() : 0;
+    return bTime - aTime;
+  });
+
+  res.json(results.slice(0, 40));
+});
+
+// Manually add or update a contact
+app.post('/api/contacts', (req, res) => {
+  const { name, phone, jid } = req.body;
+  if (!name && !phone && !jid) {
+    return res.status(400).json({ error: 'Name or phone is required' });
+  }
+  const targetJid = jid || formatJID(phone);
+  if (!targetJid) {
+    return res.status(400).json({ error: 'Invalid phone or JID format' });
+  }
+
+  upsertContact({
+    jid: targetJid,
+    name: name || phone,
+    phone,
+    lastUsed: new Date().toISOString()
+  });
+
+  res.json({ success: true, contact: contactsMap.get(targetJid) });
+});
+
 // Get all scheduled messages
 app.get('/api/messages', (req, res) => {
   const schedules = loadSchedules();
@@ -438,6 +610,14 @@ app.post('/api/messages', async (req, res) => {
     const schedules = loadSchedules();
     schedules.push(newItem);
     saveSchedules(schedules);
+
+    // Automatically remember this contact for instant future autocomplete
+    upsertContact({
+      jid,
+      name: recipientName || recipient,
+      phone: recipient,
+      lastUsed: new Date().toISOString()
+    });
 
     broadcastSSE('schedule_created', newItem);
 
@@ -565,5 +745,6 @@ app.delete('/api/messages/:id', (req, res) => {
 // Start Express server and connect WhatsApp (Bound strictly to 127.0.0.1 for maximum privacy)
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`[Server] WhatsApp Message Scheduler listening securely on http://127.0.0.1:${PORT}`);
+  loadContacts();
   initWhatsApp();
 });

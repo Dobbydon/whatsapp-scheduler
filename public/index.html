@@ -126,34 +126,58 @@
               </div>
             </div>
 
-            <!-- Recipient Input Row -->
-            <div class="form-row">
-              <div class="form-group flex-2">
-                <label for="input-recipient" class="form-label required">Recipient Phone Number</label>
-                <div class="input-with-prefix">
-                  <span class="input-prefix">📞</span>
-                  <input 
-                    type="tel" 
-                    id="input-recipient" 
-                    class="form-control" 
-                    placeholder="e.g. +1 555 123 4567 or +91 9876543210" 
-                    required 
-                    autocomplete="tel"
-                  >
+            <!-- Recent Contacts Quick Bar -->
+            <div class="form-group" id="recent-contacts-wrapper">
+              <label class="form-label">
+                <span>Recent Contacts</span>
+                <span class="form-hint">1-click to select</span>
+              </label>
+              <div class="recent-contacts-pills" id="recent-contacts-pills">
+                <!-- Dynamically populated e.g. [👤 Anu] [👤 Sajal Sir] -->
+              </div>
+            </div>
+
+            <!-- Smart Recipient Contact Search & Autocomplete -->
+            <div class="form-group contact-picker-group">
+              <label for="input-contact-search" class="form-label required">
+                <span>Recipient Contact</span>
+                <span class="form-hint">Type name or phone number</span>
+              </label>
+
+              <!-- Selected Contact Badge -->
+              <div id="selected-contact-card" class="selected-contact-card hidden">
+                <div class="selected-contact-avatar" id="selected-contact-avatar">A</div>
+                <div class="selected-contact-details">
+                  <span class="selected-contact-name" id="selected-contact-name">Anu</span>
+                  <span class="selected-contact-phone" id="selected-contact-phone">+91 96340 31215</span>
                 </div>
-                <span class="field-hint">Include country code (e.g. +1 for US/CA, +91 for India, +44 for UK)</span>
+                <button type="button" id="btn-clear-contact" class="btn-clear-contact" title="Change or clear contact">✕ Change</button>
               </div>
 
-              <div class="form-group flex-1">
-                <label for="input-recipient-name" class="form-label">Contact Name / Label</label>
-                <input 
-                  type="text" 
-                  id="input-recipient-name" 
-                  class="form-control" 
-                  placeholder="e.g. Alex (Design Lead)"
-                >
-                <span class="field-hint">For your reference</span>
+              <!-- Search Input & Autocomplete Wrapper -->
+              <div class="contact-search-wrapper" id="contact-search-wrapper">
+                <div class="input-with-prefix">
+                  <span class="input-prefix">🔍</span>
+                  <input 
+                    type="text" 
+                    id="input-contact-search" 
+                    class="form-control" 
+                    placeholder="Search by name (e.g. Anu) or enter phone number..." 
+                    autocomplete="off"
+                  >
+                </div>
+
+                <!-- Floating Autocomplete Dropdown -->
+                <div id="contact-autocomplete-dropdown" class="contact-autocomplete-dropdown hidden">
+                  <div class="autocomplete-header">Matching Contacts & Recent Chats</div>
+                  <div id="autocomplete-list" class="autocomplete-list"></div>
+                </div>
               </div>
+
+              <!-- Underlying Form Values for Dispatch Engine -->
+              <input type="hidden" id="input-recipient" required>
+              <input type="hidden" id="input-recipient-name">
+              <span class="field-hint" id="contact-field-hint">Select a contact from your recent chats or type any phone number with country code.</span>
             </div>
 
             <!-- Message Textarea -->

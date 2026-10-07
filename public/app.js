@@ -11,6 +11,9 @@ const state = {
     qrGeneratedAt: null
   },
   messages: [],
+  contacts: [],
+  selectedContact: null,
+  focusedAutocompleteIdx: -1,
   activeFilter: 'all',
   searchQuery: '',
   selectedPresetOffset: 5 // default +5 mins
@@ -44,6 +47,18 @@ const elements = {
   countPending: document.getElementById('count-pending'),
   countSent: document.getElementById('count-sent'),
   countFailed: document.getElementById('count-failed'),
+
+  // Contact Picker Elements
+  recentContactsPills: document.getElementById('recent-contacts-pills'),
+  inputContactSearch: document.getElementById('input-contact-search'),
+  contactSearchWrapper: document.getElementById('contact-search-wrapper'),
+  contactAutocompleteDropdown: document.getElementById('contact-autocomplete-dropdown'),
+  autocompleteList: document.getElementById('autocomplete-list'),
+  selectedContactCard: document.getElementById('selected-contact-card'),
+  selectedContactAvatar: document.getElementById('selected-contact-avatar'),
+  selectedContactName: document.getElementById('selected-contact-name'),
+  selectedContactPhone: document.getElementById('selected-contact-phone'),
+  btnClearContact: document.getElementById('btn-clear-contact'),
 
   // Form
   scheduleForm: document.getElementById('schedule-form'),
@@ -219,6 +234,225 @@ async function fetchMessages() {
     console.error('Failed to fetch messages:', err);
   }
 }
+
+// Fetch Contacts from Server
+async function fetchContacts(query = '') {
+  try {
+    const res = await fetch(`/api/contacts?q=${encodeURIComponent(query)}`);
+    const data = await res.json();
+    if (!query) {
+      state.contacts = data;
+      renderRecentContactChips(data);
+    }
+    return data;
+  } catch (err) {
+    console.error('Failed to fetch contacts:', err);
+    return [];
+  }
+}
+
+// Render Recent Contact Chips (1-click to select)
+function renderRecentContactChips(contactsList) {
+  if (!elements.recentContactsPills) return;
+  elements.recentContactsPills.innerHTML = '';
+
+  // Get top 8 contacts with names
+  const recent = (contactsList || []).filter(c => c.name).slice(0, 8);
+  const wrapper = document.getElementById('recent-contacts-wrapper');
+  if (recent.length === 0) {
+    if (wrapper) wrapper.classList.add('hidden');
+    return;
+  }
+  if (wrapper) wrapper.classList.remove('hidden');
+
+  recent.forEach(contact => {
+    const initial = (contact.name || 'C').charAt(0).toUpperCase();
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'recent-contact-chip';
+    chip.innerHTML = `
+      <span class="chip-avatar">${escapeHtml(initial)}</span>
+      <span>${escapeHtml(contact.name)}</span>
+    `;
+    chip.title = `${contact.name} (${contact.phone || contact.jid})`;
+    chip.addEventListener('click', () => {
+      selectContact(contact);
+    });
+    elements.recentContactsPills.appendChild(chip);
+  });
+}
+
+// Select a Contact
+function selectContact(contact) {
+  state.selectedContact = contact;
+  const phone = contact.phone || contact.jid.split('@')[0];
+  const name = contact.name || phone;
+
+  elements.inputRecipient.value = phone;
+  elements.inputRecipientName.value = name;
+
+  // Update Selected Contact Card
+  const initial = name.charAt(0).toUpperCase();
+  elements.selectedContactAvatar.textContent = initial;
+  elements.selectedContactName.textContent = name;
+  elements.selectedContactPhone.textContent = phone;
+
+  // Toggle Visibility
+  elements.selectedContactCard.classList.remove('hidden');
+  elements.contactSearchWrapper.classList.add('hidden');
+  hideAutocomplete();
+
+  // Focus message textarea for fast composition!
+  elements.inputMessage.focus();
+}
+
+// Clear Selected Contact
+function clearSelectedContact() {
+  state.selectedContact = null;
+  elements.inputRecipient.value = '';
+  elements.inputRecipientName.value = '';
+
+  elements.selectedContactCard.classList.add('hidden');
+  elements.contactSearchWrapper.classList.remove('hidden');
+  elements.inputContactSearch.value = '';
+  elements.inputContactSearch.focus();
+}
+
+// Render Autocomplete Dropdown
+let searchDebounceTimer = null;
+elements.inputContactSearch?.addEventListener('input', () => {
+  const query = elements.inputContactSearch.value.trim();
+  clearTimeout(searchDebounceTimer);
+
+  if (!query) {
+    hideAutocomplete();
+    return;
+  }
+
+  searchDebounceTimer = setTimeout(async () => {
+    const matches = await fetchContacts(query);
+    renderAutocompleteDropdown(matches, query);
+  }, 120);
+});
+
+function renderAutocompleteDropdown(matches, query) {
+  elements.autocompleteList.innerHTML = '';
+  state.focusedAutocompleteIdx = -1;
+
+  if (matches.length === 0) {
+    // If no contact matched but user typed numbers, offer to use as direct number
+    const cleanNumbers = query.replace(/[^0-9]/g, '');
+    if (cleanNumbers.length >= 7) {
+      const item = document.createElement('div');
+      item.className = 'autocomplete-item';
+      item.innerHTML = `
+        <div class="autocomplete-item-left">
+          <div class="autocomplete-avatar">📞</div>
+          <div class="autocomplete-info">
+            <span class="autocomplete-name">Use Phone Number: +${cleanNumbers}</span>
+            <span class="autocomplete-phone">Click to select</span>
+          </div>
+        </div>
+        <span class="autocomplete-badge">Direct Number</span>
+      `;
+      item.onclick = () => {
+        selectContact({
+          name: `+${cleanNumbers}`,
+          phone: `+${cleanNumbers}`,
+          jid: `${cleanNumbers}@s.whatsapp.net`
+        });
+      };
+      elements.autocompleteList.appendChild(item);
+      elements.contactAutocompleteDropdown.classList.remove('hidden');
+      return;
+    }
+
+    elements.autocompleteList.innerHTML = `
+      <div style="padding: 0.85rem; text-align: center; font-size: 0.8rem; color: var(--text-muted);">
+        No contacts found matching "${escapeHtml(query)}"
+      </div>
+    `;
+    elements.contactAutocompleteDropdown.classList.remove('hidden');
+    return;
+  }
+
+  matches.forEach((c, idx) => {
+    const initial = (c.name || 'C').charAt(0).toUpperCase();
+    const item = document.createElement('div');
+    item.className = 'autocomplete-item';
+    item.dataset.index = idx;
+
+    item.innerHTML = `
+      <div class="autocomplete-item-left">
+        <div class="autocomplete-avatar">${escapeHtml(initial)}</div>
+        <div class="autocomplete-info">
+          <span class="autocomplete-name">${escapeHtml(c.name)}</span>
+          <span class="autocomplete-phone">${escapeHtml(c.phone || c.jid)}</span>
+        </div>
+      </div>
+      <span class="autocomplete-badge">${c.isGroup ? 'Group' : 'Contact'}</span>
+    `;
+
+    item.addEventListener('click', () => {
+      selectContact(c);
+    });
+
+    elements.autocompleteList.appendChild(item);
+  });
+
+  elements.contactAutocompleteDropdown.classList.remove('hidden');
+}
+
+function hideAutocomplete() {
+  elements.contactAutocompleteDropdown?.classList.add('hidden');
+  state.focusedAutocompleteIdx = -1;
+}
+
+// Keyboard Navigation for Autocomplete
+elements.inputContactSearch?.addEventListener('keydown', (e) => {
+  const items = elements.autocompleteList.querySelectorAll('.autocomplete-item');
+  if (items.length === 0 || elements.contactAutocompleteDropdown.classList.contains('hidden')) {
+    return;
+  }
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    state.focusedAutocompleteIdx = (state.focusedAutocompleteIdx + 1) % items.length;
+    updateFocusedAutocompleteItem(items);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    state.focusedAutocompleteIdx = (state.focusedAutocompleteIdx - 1 + items.length) % items.length;
+    updateFocusedAutocompleteItem(items);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (state.focusedAutocompleteIdx >= 0 && items[state.focusedAutocompleteIdx]) {
+      items[state.focusedAutocompleteIdx].click();
+    }
+  } else if (e.key === 'Escape') {
+    hideAutocomplete();
+  }
+});
+
+function updateFocusedAutocompleteItem(items) {
+  items.forEach((it, idx) => {
+    if (idx === state.focusedAutocompleteIdx) {
+      it.classList.add('is-focused');
+      it.scrollIntoView({ block: 'nearest' });
+    } else {
+      it.classList.remove('is-focused');
+    }
+  });
+}
+
+// Click outside to close dropdown
+document.addEventListener('click', (e) => {
+  if (elements.contactSearchWrapper && !elements.contactSearchWrapper.contains(e.target)) {
+    hideAutocomplete();
+  }
+});
+
+// Clear Contact Button Listener
+elements.btnClearContact?.addEventListener('click', clearSelectedContact);
 
 // Connect to Server-Sent Events (SSE)
 function setupSSE() {
@@ -655,31 +889,52 @@ elements.scheduleForm.addEventListener('submit', async (e) => {
 
 // Button: Send Test Immediately
 elements.btnSendTest.addEventListener('click', async () => {
-  if (!elements.inputRecipient.value.trim() || !elements.inputMessage.value.trim()) {
-    showToast('Please enter both recipient phone and message text to send', 'error');
-    elements.inputRecipient.focus();
+  const query = elements.inputContactSearch?.value.trim() || '';
+  if ((!elements.inputRecipient.value.trim() && !query) || !elements.inputMessage.value.trim()) {
+    showToast('Please select a recipient contact and enter a message text', 'error');
+    elements.inputContactSearch?.focus();
     return;
   }
   await handleScheduleSubmit(true);
 });
 
 async function handleScheduleSubmit(sendImmediately) {
-  const recipient = elements.inputRecipient.value.trim();
-  const recipientName = elements.inputRecipientName.value.trim();
+  let recipient = elements.inputRecipient.value.trim();
+  let recipientName = elements.inputRecipientName.value.trim();
+
+  // If user didn't pick from dropdown, check if they typed a name or phone into search box
+  if (!recipient && elements.inputContactSearch?.value.trim()) {
+    const query = elements.inputContactSearch.value.trim();
+    // Check if matching contact in state.contacts
+    const exactMatch = state.contacts.find(c => (c.name || '').toLowerCase() === query.toLowerCase());
+    if (exactMatch) {
+      recipient = exactMatch.phone || exactMatch.jid;
+      recipientName = exactMatch.name;
+    } else {
+      const cleanDigits = query.replace(/[^0-9]/g, '');
+      if (cleanDigits.length >= 7) {
+        recipient = `+${cleanDigits}`;
+        recipientName = query;
+      }
+    }
+  }
+
+  if (!recipient) {
+    showToast('Please select a contact or enter a recipient phone number', 'error');
+    elements.inputContactSearch?.focus();
+    return;
+  }
+  if (!elements.inputMessage.value.trim()) {
+    showToast('Message content cannot be empty', 'error');
+    elements.inputMessage.focus();
+    return;
+  }
+
   const message = elements.inputMessage.value.trim();
   const scheduledAt = sendImmediately 
     ? new Date().toISOString() 
     : new Date(elements.inputScheduleDatetime.value).toISOString();
   const repeat = elements.inputRepeat.value;
-
-  if (!recipient) {
-    showToast('Recipient phone number is required', 'error');
-    return;
-  }
-  if (!message) {
-    showToast('Message content cannot be empty', 'error');
-    return;
-  }
 
   const payload = {
     recipient,
@@ -713,6 +968,8 @@ async function handleScheduleSubmit(sendImmediately) {
     elements.inputMessage.value = '';
     updateCharCounter();
     setDefaultScheduleDate(5);
+    clearSelectedContact();
+    fetchContacts(); // Refresh contact usage list
 
   } catch (err) {
     showToast('Network error while scheduling message', 'error');
@@ -827,4 +1084,5 @@ elements.btnLogout.addEventListener('click', async () => {
 setDefaultScheduleDate(5);
 fetchStatus();
 fetchMessages();
+fetchContacts();
 setupSSE();
