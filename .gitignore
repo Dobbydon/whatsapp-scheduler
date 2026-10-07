@@ -1,5 +1,4 @@
 node_modules/
 .DS_Store
-data/auth_info_baileys/
-data/exported_cloud_env.txt
+data/
 npm-debug.log*
