@@ -385,12 +385,26 @@
               </div>
 
               <div class="qr-instructions">
+                <div class="device-guide-badge">
+                  <span>📱 <strong>iPhone Instructions:</strong></span>
+                </div>
                 <ol>
-                  <li>Open <strong>WhatsApp</strong> on your phone</li>
-                  <li>Tap <strong>Menu (⋮)</strong> on Android or <strong>Settings</strong> on iPhone</li>
-                  <li>Select <strong>Linked Devices</strong> &rarr; <strong>Link a Device</strong></li>
+                  <li>Open <strong>WhatsApp</strong> on your iPhone</li>
+                  <li>Tap <strong>Settings ⚙️</strong> in the bottom-right corner</li>
+                  <li>Tap <strong>Linked Devices</strong> &rarr; <strong>Link a Device</strong> (Face ID / Passcode)</li>
                   <li>Scan the QR code above</li>
                 </ol>
+                <div class="alt-device-note">
+                  <small>Using Android? Tap <strong>Menu (⋮)</strong> &rarr; <strong>Linked Devices</strong> &rarr; <strong>Link a Device</strong>.</small>
+                </div>
+              </div>
+
+              <!-- Reset Session Helper Button -->
+              <div class="pairing-footer-actions">
+                <button id="btn-reset-session" type="button" class="btn-link-subtle" title="Clear any stale session data and generate a brand-new QR code">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                  <span>Switched phones or QR not loading? <strong>Reset Session & Refresh QR</strong></span>
+                </button>
               </div>
             </div>
 
@@ -412,7 +426,7 @@
                 <div id="pairing-code-display" class="pairing-code-display hidden">
                   <span class="code-label">Enter this code on your phone:</span>
                   <div id="pairing-code-value" class="code-value">---- ----</div>
-                  <span class="code-instruction">Go to WhatsApp &rarr; Linked Devices &rarr; Link with phone number</span>
+                  <span class="code-instruction">iPhone: WhatsApp &rarr; Settings &rarr; Linked Devices &rarr; Link a Device &rarr; Link with phone number instead</span>
                 </div>
               </div>
             </div>

@@ -90,6 +90,7 @@ const elements = {
   qrLoadingSpinner: document.getElementById('qr-loading-spinner'),
   btnReconnect: document.getElementById('btn-reconnect'),
   btnLogout: document.getElementById('btn-logout'),
+  btnResetSession: document.getElementById('btn-reset-session'),
 
   // Pairing Code Tab
   tabQr: document.getElementById('tab-qr'),
@@ -1077,6 +1078,24 @@ elements.btnLogout.addEventListener('click', async () => {
     showToast('Disconnected from WhatsApp', 'info');
   } catch (err) {
     showToast('Error logging out', 'error');
+  }
+});
+
+// Reset Session (useful when switching phones from Android to iPhone)
+elements.btnResetSession?.addEventListener('click', async () => {
+  try {
+    showToast('Clearing old session & generating fresh QR...', 'info');
+    elements.qrImage.classList.add('hidden');
+    elements.qrLoadingSpinner.classList.remove('hidden');
+    const res = await fetch('/api/reset-session', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Session reset! Generating fresh QR code...', 'success');
+    } else {
+      showToast(data.error || 'Failed to reset session', 'error');
+    }
+  } catch (err) {
+    showToast('Error resetting session', 'error');
   }
 });
 

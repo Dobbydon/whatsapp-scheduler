@@ -1522,6 +1522,49 @@ body {
   to { transform: translateX(20px); opacity: 0; }
 }
 
+/* Device Guide & Reset Session */
+.device-guide-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--wa-emerald);
+  margin-bottom: 0.4rem;
+}
+
+.alt-device-note {
+  margin-top: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.775rem;
+}
+
+.pairing-footer-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.5rem;
+  width: 100%;
+}
+
+.btn-link-subtle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: 1px dashed var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-link-subtle:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-main);
+  border-color: var(--wa-emerald);
+}
+
 .hidden {
   display: none !important;
 }

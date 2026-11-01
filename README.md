@@ -44,11 +44,13 @@ The server will start on **`http://localhost:3030`**.
 ### 2. Connect Your WhatsApp
 1. Open [http://localhost:3030](http://localhost:3030) in your browser.
 2. Click **Link Device** (or wait for the QR dialog).
-3. On your phone:
-   - Open **WhatsApp** &rarr; **Settings** (iOS) or **Menu ⋮** (Android).
-   - Tap **Linked Devices** &rarr; **Link a Device**.
-   - Point your phone camera at the QR code on the screen.
-4. Once scanned, your status will instantly change to **Connected**!
+3. On your **iPhone**:
+   - Open **WhatsApp** &rarr; tap **Settings ⚙️** (bottom-right corner).
+   - Tap **Linked Devices** &rarr; **Link a Device** (authenticate with Face ID / Passcode).
+   - Point your iPhone camera at the QR code on your screen.
+   *(Or tap "Link with phone number instead" to pair with an 8-digit code without camera).*
+   *(On Android: Open WhatsApp &rarr; Menu ⋮ &rarr; Linked Devices &rarr; Link a Device).*
+4. Once linked, the status changes to **Connected** and all queued messages will dispatch automatically!
 
 ### 3. Schedule Messages
 1. Enter the recipient's phone number with country code (e.g., `+1 555 123 4567` or `+91 98765 43210`).

@@ -227,16 +227,16 @@ async function initWhatsApp(forceNew = false) {
 
       if (connection === 'close') {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-        console.log(`[WhatsApp] Connection closed. StatusCode: ${statusCode}. Reconnecting: ${shouldReconnect}`);
+        const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+        console.log(`[WhatsApp] Connection closed. StatusCode: ${statusCode}. Reconnecting: ${!isLoggedOut}`);
 
-        if (statusCode === DisconnectReason.loggedOut) {
+        if (isLoggedOut) {
           connectionStatus = 'disconnected';
           userInfo = null;
           qrCodeDataUrl = null;
           qrRaw = null;
           isReconnecting = false;
-          // Clear credentials directory
+          // Clear credentials directory only when permanently logged out
           try {
             fs.rmSync(AUTH_DIR, { recursive: true, force: true });
             fs.mkdirSync(AUTH_DIR, { recursive: true });
@@ -244,13 +244,17 @@ async function initWhatsApp(forceNew = false) {
             console.error('Failed to clean auth dir:', e);
           }
           broadcastSSE('status', getStatusPayload());
+          // Automatically re-initialize to generate a fresh QR code
+          setTimeout(() => initWhatsApp(true), 1500);
         } else {
           connectionStatus = 'connecting';
           broadcastSSE('status', getStatusPayload());
+          // 515 (restartRequired) is standard after QR scan to reload creds: reconnect immediately
+          const delay = statusCode === DisconnectReason.restartRequired ? 500 : 3000;
           setTimeout(() => {
             isReconnecting = false;
-            initWhatsApp();
-          }, 4000);
+            initWhatsApp(true);
+          }, delay);
         }
       }
     });
@@ -489,6 +493,39 @@ app.post('/api/logout', async (req, res) => {
 
     broadcastSSE('status', getStatusPayload());
     res.json({ success: true, message: 'Logged out successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Hard reset session (useful when switching phones from Android to iPhone)
+app.post('/api/reset-session', async (req, res) => {
+  try {
+    if (sock) {
+      try {
+        await sock.logout();
+      } catch (e) {}
+      try {
+        sock.end();
+      } catch (e) {}
+      sock = null;
+    }
+    try {
+      fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+      fs.mkdirSync(AUTH_DIR, { recursive: true });
+    } catch (e) {}
+
+    connectionStatus = 'disconnected';
+    userInfo = null;
+    qrCodeDataUrl = null;
+    qrRaw = null;
+    isReconnecting = false;
+
+    // Trigger fresh QR code initialization
+    setTimeout(() => initWhatsApp(true), 500);
+
+    broadcastSSE('status', getStatusPayload());
+    res.json({ success: true, message: 'Session reset successfully. A fresh QR code will be generated.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
