@@ -17,6 +17,16 @@ const DATA_DIR = path.join(__dirname, 'data');
 const AUTH_DIR = path.join(DATA_DIR, 'auth_info_baileys');
 const SCHEDULES_FILE = path.join(DATA_DIR, 'schedules.json');
 const CONTACTS_FILE = path.join(DATA_DIR, 'contacts.json');
+const TEMPLATES_FILE = path.join(DATA_DIR, 'templates.json');
+
+const DEFAULT_TEMPLATES = [
+  { id: 'meeting', title: '📅 Meeting Reminder', content: 'Hi {name}! Friendly reminder about our meeting scheduled for today at {time}. Looking forward to connecting! 📅' },
+  { id: 'birthday', title: '🎂 Birthday Wish', content: 'Happy Birthday, {name}! 🎂 Wishing you a wonderful year ahead filled with joy, health, and success! 🎉' },
+  { id: 'followup', title: '💼 Follow-up', content: 'Hi {name}, just following up on our previous conversation. Please let me know if you had a chance to look into this. Thanks! 💼' },
+  { id: 'checkin', title: '👋 Quick Check-in', content: '{greeting} {name}! Just checking in to see how everything is going with you today. Hope you have a productive day! 👋' },
+  { id: 'urgent', title: '🚨 Urgent Alert', content: '🚨 Urgent update, {name}: Please review the latest details as soon as possible and let me know your thoughts.' },
+  { id: 'standup', title: '📋 Daily Standup', content: '{greeting} team! Here is my update for today:\n1. Done yesterday:\n2. Planned for today:\n3. Blockers:' }
+];
 
 // Ensure directories exist
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -26,6 +36,9 @@ if (!fs.existsSync(SCHEDULES_FILE)) {
 }
 if (!fs.existsSync(CONTACTS_FILE)) {
   fs.writeFileSync(CONTACTS_FILE, JSON.stringify([], null, 2), 'utf-8');
+}
+if (!fs.existsSync(TEMPLATES_FILE)) {
+  fs.writeFileSync(TEMPLATES_FILE, JSON.stringify(DEFAULT_TEMPLATES, null, 2), 'utf-8');
 }
 
 const app = express();
@@ -71,6 +84,29 @@ function saveSchedules(schedules) {
     fs.writeFileSync(SCHEDULES_FILE, JSON.stringify(schedules, null, 2), 'utf-8');
   } catch (e) {
     console.error('Error writing schedules.json:', e);
+  }
+}
+
+// Templates persistence helpers
+function loadTemplates() {
+  try {
+    if (!fs.existsSync(TEMPLATES_FILE)) {
+      fs.writeFileSync(TEMPLATES_FILE, JSON.stringify(DEFAULT_TEMPLATES, null, 2), 'utf-8');
+      return DEFAULT_TEMPLATES;
+    }
+    const raw = fs.readFileSync(TEMPLATES_FILE, 'utf-8');
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Error reading templates.json:', e);
+    return DEFAULT_TEMPLATES;
+  }
+}
+
+function saveTemplates(templates) {
+  try {
+    fs.writeFileSync(TEMPLATES_FILE, JSON.stringify(templates, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error writing templates.json:', e);
   }
 }
 
@@ -349,7 +385,16 @@ async function processScheduledMessages() {
           }
 
           console.log(`[Scheduler] Dispatching message to ${jid}: "${item.message.slice(0, 30)}..."`);
-          const sendResult = await sock.sendMessage(jid, { text: item.message });
+          
+          let sendResult;
+          if (item.mediaUrl && item.mediaUrl.trim().startsWith('http')) {
+            sendResult = await sock.sendMessage(jid, {
+              image: { url: item.mediaUrl.trim() },
+              caption: item.message
+            });
+          } else {
+            sendResult = await sock.sendMessage(jid, { text: item.message });
+          }
 
           item.status = 'sent';
           item.sentAt = new Date().toISOString();
@@ -603,70 +648,177 @@ app.get('/api/messages', (req, res) => {
   res.json(schedules);
 });
 
-// Create a new scheduled message (or send immediately)
+// Create a new scheduled message (or send immediately), supporting single or batch recipients
 app.post('/api/messages', async (req, res) => {
   try {
-    const { recipient, recipientName, message, scheduledAt, repeat, sendImmediately } = req.body;
+    const { 
+      recipient, 
+      recipientName, 
+      recipients, 
+      message, 
+      mediaUrl,
+      scheduledAt, 
+      repeat, 
+      sendImmediately 
+    } = req.body;
 
-    if (!recipient || !message) {
-      return res.status(400).json({ error: 'Recipient phone number and message are required' });
-    }
-
-    const jid = formatJID(recipient);
-    if (!jid) {
-      return res.status(400).json({
-        error: 'Invalid recipient phone number. Please include country code (e.g. +1 555 123 4567 or +91 98765 43210).'
-      });
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: 'Message content is required' });
     }
 
     let targetTime = scheduledAt ? new Date(scheduledAt) : new Date();
     if (isNaN(targetTime.getTime())) {
       return res.status(400).json({ error: 'Invalid scheduled time format' });
     }
-
-    // If sendImmediately is true, set time to now
     if (sendImmediately) {
       targetTime = new Date();
     }
 
-    const newItem = {
-      id: uuidv4(),
-      recipient: recipient.trim(),
-      recipientName: (recipientName || '').trim() || null,
-      jid,
-      message: message.trim(),
-      scheduledAt: targetTime.toISOString(),
-      createdAt: new Date().toISOString(),
-      status: 'pending',
-      sentAt: null,
-      error: null,
-      repeat: repeat || 'none', // 'none' | 'daily' | 'weekly'
-      attempts: 0
-    };
+    // Determine target recipient list (single, comma-separated, or array)
+    let targetList = [];
+    if (Array.isArray(recipients) && recipients.length > 0) {
+      targetList = recipients;
+    } else if (recipient) {
+      const parts = recipient.split(',').map(p => p.trim()).filter(Boolean);
+      for (const p of parts) {
+        targetList.push({ phone: p, name: recipientName || null });
+      }
+    }
+
+    if (targetList.length === 0) {
+      return res.status(400).json({ error: 'At least one recipient phone number is required' });
+    }
 
     const schedules = loadSchedules();
-    schedules.push(newItem);
+    const createdItems = [];
+
+    for (const r of targetList) {
+      const rawPhone = typeof r === 'string' ? r : (r.phone || r.recipient);
+      const contactName = typeof r === 'object' ? (r.name || r.recipientName) : null;
+      const jid = formatJID(rawPhone);
+      if (!jid) continue;
+
+      // Personalized message with {name} replacement if present
+      let personalMsg = message.trim();
+      if (contactName) {
+        personalMsg = personalMsg.replace(/\{name\}/gi, contactName.trim());
+      } else {
+        personalMsg = personalMsg.replace(/\{name\}/gi, 'there');
+      }
+
+      const newItem = {
+        id: uuidv4(),
+        recipient: rawPhone.trim(),
+        recipientName: contactName ? contactName.trim() : null,
+        jid,
+        message: personalMsg,
+        mediaUrl: (mediaUrl || '').trim() || null,
+        scheduledAt: targetTime.toISOString(),
+        createdAt: new Date().toISOString(),
+        status: 'pending',
+        sentAt: null,
+        error: null,
+        repeat: repeat || 'none',
+        attempts: 0
+      };
+
+      schedules.push(newItem);
+      createdItems.push(newItem);
+
+      // Automatically remember contact for instant autocomplete
+      upsertContact({
+        jid,
+        name: contactName || rawPhone,
+        phone: rawPhone,
+        lastUsed: new Date().toISOString()
+      });
+
+      broadcastSSE('schedule_created', newItem);
+    }
+
+    if (createdItems.length === 0) {
+      return res.status(400).json({ error: 'No valid recipient phone numbers provided (check country codes).' });
+    }
+
     saveSchedules(schedules);
 
-    // Automatically remember this contact for instant future autocomplete
-    upsertContact({
-      jid,
-      name: recipientName || recipient,
-      phone: recipient,
-      lastUsed: new Date().toISOString()
-    });
-
-    broadcastSSE('schedule_created', newItem);
-
-    // If sendImmediately, trigger instant cycle
     if (sendImmediately) {
       setImmediate(processScheduledMessages);
     }
 
-    res.status(201).json(newItem);
+    if (createdItems.length === 1) {
+      res.status(201).json(createdItems[0]);
+    } else {
+      res.status(201).json({ success: true, count: createdItems.length, items: createdItems });
+    }
   } catch (err) {
+    console.error('Error scheduling message(s):', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// Templates CRUD API
+app.get('/api/templates', (req, res) => {
+  res.json(loadTemplates());
+});
+
+app.post('/api/templates', (req, res) => {
+  const { title, content } = req.body;
+  if (!title || !content) {
+    return res.status(400).json({ error: 'Title and content are required' });
+  }
+  const templates = loadTemplates();
+  const newTemplate = {
+    id: uuidv4(),
+    title: title.trim(),
+    content: content.trim()
+  };
+  templates.push(newTemplate);
+  saveTemplates(templates);
+  res.status(201).json(newTemplate);
+});
+
+app.delete('/api/templates/:id', (req, res) => {
+  const { id } = req.params;
+  const templates = loadTemplates();
+  const filtered = templates.filter(t => t.id !== id);
+  saveTemplates(filtered);
+  res.json({ success: true, message: 'Template removed' });
+});
+
+// Export Queue to CSV
+app.get('/api/messages/export/csv', (req, res) => {
+  const schedules = loadSchedules();
+  let csv = 'ID,Recipient,Recipient Name,Status,Scheduled At,Sent At,Recurrence,Attempts,WhatsApp Msg ID,Notes,Message\n';
+  for (const s of schedules) {
+    const esc = (val) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+    csv += [
+      esc(s.id),
+      esc(s.recipient),
+      esc(s.recipientName || ''),
+      esc(s.status),
+      esc(s.scheduledAt),
+      esc(s.sentAt || ''),
+      esc(s.repeat || 'none'),
+      esc(s.attempts || 0),
+      esc(s.waMessageId || ''),
+      esc(s.notes || ''),
+      esc(s.message)
+    ].join(',') + '\n';
+  }
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="whatsapp-scheduler-${new Date().toISOString().slice(0, 10)}.csv"`);
+  res.send(csv);
+});
+
+// Purge Sent & Failed History
+app.post('/api/messages/clear-sent', (req, res) => {
+  const schedules = loadSchedules();
+  const kept = schedules.filter(s => s.status === 'pending' || s.status === 'sending');
+  const removedCount = schedules.length - kept.length;
+  saveSchedules(kept);
+  broadcastSSE('queue_reset', { kept: kept.length });
+  res.json({ success: true, removedCount });
 });
 
 // Immediate Dispatch: "Send Now" button for any pending message

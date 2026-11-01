@@ -37,6 +37,16 @@
           <span id="live-clock-time">--:--:--</span>
         </div>
 
+        <!-- Sound Effects Toggle -->
+        <button id="btn-sound-toggle" class="btn btn-icon" title="Toggle Sound Chimes (Enabled)" aria-label="Toggle Sound Effects">
+          <span id="sound-icon">🔊</span>
+        </button>
+
+        <!-- Browser Notification Toggle -->
+        <button id="btn-notify-toggle" class="btn btn-icon" title="Enable Desktop Notifications" aria-label="Desktop Notifications">
+          <span id="notify-icon">🔔</span>
+        </button>
+
         <!-- Connection Status Badge -->
         <div id="connection-status-pill" class="status-pill status-disconnected" role="status">
           <span class="status-dot"></span>
@@ -113,16 +123,17 @@
             
             <!-- Quick Template Chips -->
             <div class="form-group">
-              <label class="form-label">
-                <span>Quick Templates</span>
-                <span class="form-hint">Click to prefill message</span>
-              </label>
+              <div class="label-with-action">
+                <label class="form-label">
+                  <span>Quick Templates</span>
+                  <span class="form-hint">1-click to prefill message</span>
+                </label>
+                <button type="button" id="btn-open-template-modal" class="btn-text-action" title="Save custom message template">
+                  + Add Template
+                </button>
+              </div>
               <div class="template-chips" id="template-chips-container">
-                <button type="button" class="chip-btn" data-template="meeting">📅 Meeting Reminder</button>
-                <button type="button" class="chip-btn" data-template="birthday">🎂 Birthday Wish</button>
-                <button type="button" class="chip-btn" data-template="followup">💼 Follow-up</button>
-                <button type="button" class="chip-btn" data-template="checkin">👋 Quick Check-in</button>
-                <button type="button" class="chip-btn" data-template="urgent">🚨 Urgent Alert</button>
+                <!-- Dynamically populated from /api/templates -->
               </div>
             </div>
 
@@ -214,6 +225,57 @@
                 placeholder="Type your WhatsApp message here... (Use *bold*, _italics_, or emojis)" 
                 required
               ></textarea>
+
+              <!-- Dynamic Variables Toolbar -->
+              <div class="variables-toolbar">
+                <span class="var-label">Dynamic Tags:</span>
+                <button type="button" class="var-btn" data-var="{name}" title="Inserts recipient contact name">{name}</button>
+                <button type="button" class="var-btn" data-var="{greeting}" title="Inserts Good Morning / Afternoon">{greeting}</button>
+                <button type="button" class="var-btn" data-var="{time}" title="Inserts scheduled time">{time}</button>
+                <button type="button" class="var-btn" data-var="{date}" title="Inserts scheduled date">{date}</button>
+              </div>
+            </div>
+
+            <!-- Optional Attachment / Image URL -->
+            <div class="form-group media-group">
+              <label for="input-media-url" class="form-label">
+                <span>Attach Image URL (Optional)</span>
+                <span class="form-hint">Sends photo with message as caption</span>
+              </label>
+              <div class="input-with-prefix">
+                <span class="input-prefix">🖼️</span>
+                <input 
+                  type="url" 
+                  id="input-media-url" 
+                  class="form-control" 
+                  placeholder="https://images.unsplash.com/... (Direct image link)"
+                >
+              </div>
+            </div>
+
+            <!-- Real-Time WhatsApp Phone Message Bubble Preview -->
+            <div class="chat-preview-box" id="chat-preview-box">
+              <div class="preview-header">
+                <div class="preview-badge">
+                  <span class="preview-dot"></span>
+                  <span>WhatsApp Message Preview</span>
+                </div>
+                <span id="preview-recipient-label" class="preview-recipient-label">To: Recipient</span>
+              </div>
+              <div class="wa-chat-bg">
+                <div class="wa-bubble-outgoing">
+                  <div id="preview-bubble-image-wrap" class="preview-bubble-image-wrap hidden">
+                    <img id="preview-bubble-image" src="" alt="Media preview" />
+                  </div>
+                  <div id="preview-bubble-text" class="preview-bubble-text">Type your message to see real-time preview...</div>
+                  <div class="preview-bubble-meta">
+                    <span id="preview-bubble-time" class="preview-bubble-time">--:--</span>
+                    <span class="preview-bubble-ticks">
+                      <svg width="16" height="11" viewBox="0 0 16 11" fill="none"><path d="M11.05 1.5L5.4 7.15L3.25 5" stroke="#53bdeb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M14.5 1.5L8.85 7.15L7.7 6" stroke="#53bdeb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- Scheduling Controls -->
@@ -275,7 +337,7 @@
               <p class="card-description">Real-time status of pending, delivered, and scheduled tasks.</p>
             </div>
 
-            <!-- Filter Controls -->
+            <!-- Filter Controls & Actions -->
             <div class="queue-toolbar">
               <div class="filter-tabs" id="filter-tabs" role="tablist">
                 <button class="filter-tab active" data-filter="all" id="tab-all">All (<span id="count-all">0</span>)</button>
@@ -284,12 +346,23 @@
                 <button class="filter-tab" data-filter="failed" id="tab-failed">Failed (<span id="count-failed">0</span>)</button>
               </div>
 
+              <div class="queue-actions-group">
+                <button type="button" id="btn-export-csv" class="btn btn-secondary btn-sm" title="Export message history as CSV file">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>Export CSV</span>
+                </button>
+                <button type="button" id="btn-clear-history" class="btn btn-secondary btn-sm btn-clear-history" title="Purge delivered & failed messages from queue">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  <span>Clear Sent</span>
+                </button>
+              </div>
+
               <div class="search-box">
                 <input 
                   type="text" 
                   id="search-input" 
                   class="search-input" 
-                  placeholder="Search recipient or text..."
+                  placeholder="Search recipient, name, or text..."
                   aria-label="Search scheduled messages"
                 >
               </div>
@@ -434,6 +507,39 @@
           </div>
 
         </div>
+      </div>
+    </div>
+
+    <!-- Add Custom Template Modal -->
+    <div id="template-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="template-modal-title">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <h3 id="template-modal-title" class="modal-title">Save Custom Template</h3>
+            <span class="modal-subtitle">Create a reusable template with dynamic variable tags</span>
+          </div>
+          <button id="btn-close-template-modal" class="modal-close-btn" aria-label="Close dialog">✕</button>
+        </div>
+
+        <form id="custom-template-form" class="modal-body">
+          <div class="form-group">
+            <label for="template-title" class="form-label required">Template Title</label>
+            <input type="text" id="template-title" class="form-control" placeholder="e.g. 🚀 Product Launch or 📅 Weekly Catchup" required>
+          </div>
+
+          <div class="form-group">
+            <div class="label-with-counter">
+              <label for="template-content" class="form-label required">Message Content</label>
+            </div>
+            <textarea id="template-content" class="form-control" rows="4" placeholder="Hello {name}! Friendly reminder that {time} is our scheduled meeting..." required></textarea>
+            <span class="field-hint">Tip: Use <code>{name}</code>, <code>{greeting}</code>, <code>{time}</code>, or <code>{date}</code> for automatic personalization.</span>
+          </div>
+
+          <div class="modal-actions-footer">
+            <button type="button" id="btn-cancel-template" class="btn btn-secondary">Cancel</button>
+            <button type="submit" id="btn-save-template" class="btn btn-primary">Save Template</button>
+          </div>
+        </form>
       </div>
     </div>
 

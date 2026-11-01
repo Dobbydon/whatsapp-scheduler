@@ -10,15 +10,20 @@ A local web application and background scheduler to connect your WhatsApp accoun
   - Connect your existing personal WhatsApp via **QR Code scanning** (multi-device session).
   - Alternative **8-digit pairing code** option without using your phone's camera.
   - Persistent authentication saved securely in `./data/auth_info_baileys`.
-- **Message Scheduling**:
+- **Message Scheduling & Personalization**:
   - Exact date & time picker + quick presets (`+2m`, `+5m`, `+15m`, `+1h`, `Tomorrow 9 AM`, `Tomorrow 8 PM`).
   - Optional recurrence (Daily, Weekly, One-time).
-  - Quick-start message templates (Meeting Reminders, Birthday Wishes, Follow-ups, Daily Standups).
-  - Formatting helpers (`*bold*`, `_italics_`, `~strike~`, emojis).
-- **Queue Management**:
+  - **Dynamic Personalization Tags**: Auto-substitute `{name}`, `{greeting}`, `{time}`, and `{date}`.
+  - **Custom Template Manager**: Save and manage your own custom reusable templates.
+  - **Image Attachment Support**: Attach direct image URLs to send photos with captions.
+  - **Real-Time Live WhatsApp Phone Bubble Preview**: See how your message and attachments look before dispatching.
+- **Queue Management & Audio-Visual Polish**:
   - Live ticking delivery countdown timer for pending messages.
+  - **1-Click Duplicate**: Load any past or pending message straight back into composer.
   - Immediate dispatch ("Send Now ⚡") test button.
   - Reschedule, edit, retry failed, or cancel messages.
+  - **Data Export & Cleanup**: 1-click Export to CSV spreadsheet and history purge.
+  - **Web Audio Chimes & Desktop Notifications**: Ambient sound feedback when messages dispatch.
   - Real-time updates via Server-Sent Events (SSE).
 
 ---

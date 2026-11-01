@@ -1565,6 +1565,287 @@ body {
   border-color: var(--wa-emerald);
 }
 
+/* Header Icon Buttons (Sound, Notification) */
+.btn-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  color: var(--text-main);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.btn-icon:hover {
+  background-color: var(--bg-card-hover);
+  border-color: var(--wa-emerald);
+  transform: translateY(-1px);
+}
+.btn-icon.active {
+  background-color: rgba(37, 211, 102, 0.15);
+  border-color: var(--wa-emerald);
+}
+
+/* Label with Action (e.g. + Add Template) */
+.label-with-action {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+.btn-text-action {
+  background: none;
+  border: none;
+  color: var(--wa-emerald);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+}
+.btn-text-action:hover {
+  background-color: rgba(37, 211, 102, 0.12);
+  text-decoration: underline;
+}
+
+/* Template Chips with delete action */
+.template-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-full);
+  padding: 0.35rem 0.85rem;
+  font-size: 0.8rem;
+  color: var(--text-sub);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.chip-btn:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-main);
+  border-color: var(--wa-emerald);
+  transform: translateY(-1px);
+}
+.chip-delete-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0 0.15rem;
+  border-radius: var(--radius-full);
+  margin-left: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+}
+.chip-delete-btn:hover {
+  color: #ef4444;
+}
+
+/* Dynamic Variable Tags */
+.variables-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.45rem;
+  padding: 0.4rem 0.6rem;
+  background-color: rgba(32, 44, 51, 0.5);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+.var-label {
+  font-size: 0.725rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.var-btn {
+  background-color: rgba(0, 168, 132, 0.15);
+  color: var(--wa-emerald);
+  border: 1px solid rgba(0, 168, 132, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 0.15rem 0.5rem;
+  font-size: 0.775rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.var-btn:hover {
+  background-color: var(--wa-emerald);
+  color: #111b21;
+  border-color: var(--wa-emerald);
+  transform: translateY(-1px);
+}
+
+/* Live WhatsApp Chat Bubble Preview Box */
+.chat-preview-box {
+  margin-top: 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  overflow: hidden;
+  background-color: #0b141a;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.85rem;
+  background-color: #1f2c34;
+  border-bottom: 1px solid var(--border-light);
+}
+.preview-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--wa-emerald);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.preview-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background-color: var(--wa-emerald);
+  box-shadow: 0 0 8px var(--wa-emerald);
+  animation: pulse-preview 2s infinite;
+}
+@keyframes pulse-preview {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+.preview-recipient-label {
+  font-size: 0.775rem;
+  color: var(--text-muted);
+}
+.wa-chat-bg {
+  padding: 1.25rem 1rem;
+  background-color: #0b141a;
+  background-image: 
+    radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    radial-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: 0 0, 12px 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+.wa-bubble-outgoing {
+  max-width: 88%;
+  background-color: #005c4b;
+  color: #e9edef;
+  border-radius: 8px 0px 8px 8px;
+  padding: 0.5rem 0.65rem 0.35rem;
+  position: relative;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.885rem;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.wa-bubble-outgoing::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -8px;
+  width: 0;
+  height: 0;
+  border-top: 8px solid #005c4b;
+  border-right: 8px solid transparent;
+}
+.preview-bubble-image-wrap {
+  width: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+  max-height: 180px;
+}
+.preview-bubble-image-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.preview-bubble-text {
+  white-space: pre-wrap;
+}
+.preview-bubble-text strong {
+  font-weight: 700;
+  color: #fff;
+}
+.preview-bubble-text em {
+  font-style: italic;
+}
+.preview-bubble-text del {
+  text-decoration: line-through;
+  opacity: 0.8;
+}
+.preview-bubble-text code {
+  font-family: var(--font-mono);
+  background: rgba(0, 0, 0, 0.25);
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  font-size: 0.825rem;
+}
+.preview-bubble-meta {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.685rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 0.1rem;
+}
+.preview-bubble-ticks {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Queue Actions Group (Export CSV, Clear Sent) */
+.queue-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.btn-clear-history:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+/* Duplicate Action Button on Queue Cards */
+.btn-action-duplicate {
+  color: #60a5fa !important;
+}
+.btn-action-duplicate:hover {
+  background-color: rgba(96, 165, 250, 0.15) !important;
+}
+
+/* Flash Animation when copying/duplicating */
+@keyframes flash-highlight {
+  0% { box-shadow: 0 0 0 3px var(--wa-emerald); }
+  100% { box-shadow: none; }
+}
+.flash-composer {
+  animation: flash-highlight 1.2s ease-out;
+}
+
 .hidden {
   display: none !important;
 }

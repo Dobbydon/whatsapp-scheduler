@@ -12,23 +12,17 @@ const state = {
   },
   messages: [],
   contacts: [],
+  templates: [],
   selectedContact: null,
   focusedAutocompleteIdx: -1,
   activeFilter: 'all',
   searchQuery: '',
-  selectedPresetOffset: 5 // default +5 mins
+  selectedPresetOffset: 5, // default +5 mins
+  soundEnabled: localStorage.getItem('wa_sound_enabled') !== 'false',
+  notificationsEnabled: typeof Notification !== 'undefined' && Notification.permission === 'granted'
 };
 
-// Quick Templates Library
-const TEMPLATES = {
-  meeting: "Hi! Just a friendly reminder about our upcoming meeting scheduled for today. Looking forward to our discussion! 📅",
-  birthday: "Happy Birthday! 🎂 Wishing you a wonderful year ahead filled with joy, good health, and success! 🎉",
-  followup: "Hi there! Just following up on our previous conversation. Please let me know if you had a chance to look into this. Thanks! 💼",
-  checkin: "Hey! Just checking in to see how everything is going with you today. Hope you're having a productive week! 👋",
-  urgent: "🚨 Urgent Alert: Please review the latest update as soon as possible and let me know your thoughts."
-};
-
-// DOM Elements
+// DOM Elements Cache
 const elements = {
   liveClock: document.getElementById('live-clock-time'),
   connectionStatusPill: document.getElementById('connection-status-pill'),
@@ -36,6 +30,12 @@ const elements = {
   btnDeviceModal: document.getElementById('btn-device-modal'),
   deviceBtnLabel: document.getElementById('device-btn-label'),
   
+  // Header Actions
+  btnSoundToggle: document.getElementById('btn-sound-toggle'),
+  soundIcon: document.getElementById('sound-icon'),
+  btnNotifyToggle: document.getElementById('btn-notify-toggle'),
+  notifyIcon: document.getElementById('notify-icon'),
+
   // Metrics
   valMetricTotal: document.getElementById('val-metric-total'),
   valMetricPending: document.getElementById('val-metric-pending'),
@@ -60,23 +60,36 @@ const elements = {
   selectedContactPhone: document.getElementById('selected-contact-phone'),
   btnClearContact: document.getElementById('btn-clear-contact'),
 
-  // Form
+  // Form & Composer
+  composerCard: document.getElementById('composer-card'),
   scheduleForm: document.getElementById('schedule-form'),
   inputRecipient: document.getElementById('input-recipient'),
   inputRecipientName: document.getElementById('input-recipient-name'),
   inputMessage: document.getElementById('input-message'),
+  inputMediaUrl: document.getElementById('input-media-url'),
   charCounter: document.getElementById('char-counter'),
   inputScheduleDatetime: document.getElementById('input-schedule-datetime'),
   inputRepeat: document.getElementById('input-repeat'),
   btnSendTest: document.getElementById('btn-send-test'),
   templateChipsContainer: document.getElementById('template-chips-container'),
+  btnOpenTemplateModal: document.getElementById('btn-open-template-modal'),
   timePresetsGroup: document.getElementById('time-presets-group'),
 
-  // Queue
+  // Live WhatsApp Chat Preview
+  chatPreviewBox: document.getElementById('chat-preview-box'),
+  previewRecipientLabel: document.getElementById('preview-recipient-label'),
+  previewBubbleText: document.getElementById('preview-bubble-text'),
+  previewBubbleTime: document.getElementById('preview-bubble-time'),
+  previewBubbleImageWrap: document.getElementById('preview-bubble-image-wrap'),
+  previewBubbleImage: document.getElementById('preview-bubble-image'),
+
+  // Queue & Toolbar
   messagesList: document.getElementById('messages-list'),
   queueEmptyState: document.getElementById('queue-empty-state'),
   searchInput: document.getElementById('search-input'),
   filterTabs: document.getElementById('filter-tabs'),
+  btnExportCsv: document.getElementById('btn-export-csv'),
+  btnClearHistory: document.getElementById('btn-clear-history'),
 
   // Device Modal
   deviceModal: document.getElementById('device-modal'),
@@ -114,10 +127,87 @@ const elements = {
   editScheduleDatetime: document.getElementById('edit-schedule-datetime'),
   editRepeat: document.getElementById('edit-repeat'),
 
+  // Template Modal
+  templateModal: document.getElementById('template-modal'),
+  btnCloseTemplateModal: document.getElementById('btn-close-template-modal'),
+  btnCancelTemplate: document.getElementById('btn-cancel-template'),
+  customTemplateForm: document.getElementById('custom-template-form'),
+  templateTitleInput: document.getElementById('template-title'),
+  templateContentInput: document.getElementById('template-content'),
+
   toastContainer: document.getElementById('toast-container')
 };
 
-// Format Date to YYYY-MM-DDTHH:mm for datetime-local input
+// Synthesized Audio Chimes (Web Audio API - Zero dependencies)
+const sound = {
+  ctx: null,
+  init() {
+    if (!this.ctx && (window.AudioContext || window.webkitAudioContext)) {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+  },
+  playSent() {
+    if (!state.soundEnabled) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, now); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, now + 0.12); // A5
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.35);
+    } catch (e) {}
+  },
+  playSchedule() {
+    if (!state.soundEnabled) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.1);
+      gain.gain.setValueAtTime(0.09, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.25);
+    } catch (e) {}
+  },
+  playClick() {
+    if (!state.soundEnabled) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(850, now);
+      gain.gain.setValueAtTime(0.03, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.05);
+    } catch (e) {}
+  }
+};
+
+// Date Format Helpers
 function formatToLocalDateTimeInput(date) {
   const pad = (n) => String(n).padStart(2, '0');
   const y = date.getFullYear();
@@ -128,17 +218,19 @@ function formatToLocalDateTimeInput(date) {
   return `${y}-${m}-${d}T${hh}:${mm}`;
 }
 
-// Set Default Scheduled Date (+5 mins)
 function setDefaultScheduleDate(minutesOffset = 5) {
   const d = new Date(Date.now() + minutesOffset * 60 * 1000);
   elements.inputScheduleDatetime.value = formatToLocalDateTimeInput(d);
   elements.inputScheduleDatetime.min = formatToLocalDateTimeInput(new Date());
+  updateLivePreview();
 }
 
 // Live Clock Updater
 function updateLiveClock() {
   const now = new Date();
-  elements.liveClock.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  if (elements.liveClock) {
+    elements.liveClock.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
 }
 setInterval(updateLiveClock, 1000);
 updateLiveClock();
@@ -147,9 +239,7 @@ updateLiveClock();
 function showToast(message, type = 'info', duration = 3500) {
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
-  toast.innerHTML = `
-    <span>${escapeHtml(message)}</span>
-  `;
+  toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
   elements.toastContainer.appendChild(toast);
 
   setTimeout(() => {
@@ -167,6 +257,71 @@ function escapeHtml(str) {
     '"': '&quot;',
     "'": '&#039;'
   })[m]);
+}
+
+// Markdown Preview Parser for Live WhatsApp Chat Bubble
+function formatMarkdownPreview(text) {
+  if (!text) return '';
+  let escaped = escapeHtml(text);
+  // Code block ```code```
+  escaped = escaped.replace(/```([\s\S]*?)```/g, '<code>$1</code>');
+  // Bold *text*
+  escaped = escaped.replace(/\*([^*\n]+)\*/g, '<strong>$1</strong>');
+  // Italic _text_
+  escaped = escaped.replace(/_([^_\\n]+)_/g, '<em>$1</em>');
+  // Strike ~text~
+  escaped = escaped.replace(/~([^~\n]+)~/g, '<del>$1</del>');
+  return escaped;
+}
+
+// Live Preview Updater
+function updateLivePreview() {
+  if (!elements.previewBubbleText) return;
+
+  const rawMsg = elements.inputMessage?.value.trim() || '';
+  const contactName = state.selectedContact?.name || elements.inputRecipientName?.value.trim() || 'Recipient';
+
+  const now = new Date();
+  const hour = now.getHours();
+  let greeting = 'Good morning';
+  if (hour >= 12 && hour < 17) greeting = 'Good afternoon';
+  else if (hour >= 17) greeting = 'Good evening';
+
+  let displayMsg = rawMsg || 'Type your message above to see real-time preview...';
+  displayMsg = displayMsg
+    .replace(/\{name\}/gi, contactName)
+    .replace(/\{greeting\}/gi, greeting)
+    .replace(/\{time\}/gi, elements.inputScheduleDatetime?.value ? new Date(elements.inputScheduleDatetime.value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+    .replace(/\{date\}/gi, elements.inputScheduleDatetime?.value ? new Date(elements.inputScheduleDatetime.value).toLocaleDateString([], { month: 'short', day: 'numeric' }) : now.toLocaleDateString([], { month: 'short', day: 'numeric' }));
+
+  elements.previewBubbleText.innerHTML = formatMarkdownPreview(displayMsg);
+  if (elements.previewRecipientLabel) {
+    elements.previewRecipientLabel.textContent = `To: ${contactName}`;
+  }
+
+  // Time in bubble
+  if (elements.previewBubbleTime) {
+    if (elements.inputScheduleDatetime?.value) {
+      try {
+        const d = new Date(elements.inputScheduleDatetime.value);
+        elements.previewBubbleTime.textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } catch (e) {
+        elements.previewBubbleTime.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+    } else {
+      elements.previewBubbleTime.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+  }
+
+  // Image Media Preview
+  const mediaUrl = elements.inputMediaUrl?.value.trim();
+  if (mediaUrl && (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://'))) {
+    elements.previewBubbleImageWrap?.classList.remove('hidden');
+    if (elements.previewBubbleImage) elements.previewBubbleImage.src = mediaUrl;
+  } else {
+    elements.previewBubbleImageWrap?.classList.add('hidden');
+    if (elements.previewBubbleImage) elements.previewBubbleImage.src = '';
+  }
 }
 
 // Render Connection Status
@@ -257,7 +412,6 @@ function renderRecentContactChips(contactsList) {
   if (!elements.recentContactsPills) return;
   elements.recentContactsPills.innerHTML = '';
 
-  // Get top 8 contacts with names
   const recent = (contactsList || []).filter(c => c.name).slice(0, 8);
   const wrapper = document.getElementById('recent-contacts-wrapper');
   if (recent.length === 0) {
@@ -277,6 +431,7 @@ function renderRecentContactChips(contactsList) {
     `;
     chip.title = `${contact.name} (${contact.phone || contact.jid})`;
     chip.addEventListener('click', () => {
+      sound.playClick();
       selectContact(contact);
     });
     elements.recentContactsPills.appendChild(chip);
@@ -303,7 +458,7 @@ function selectContact(contact) {
   elements.contactSearchWrapper.classList.add('hidden');
   hideAutocomplete();
 
-  // Focus message textarea for fast composition!
+  updateLivePreview();
   elements.inputMessage.focus();
 }
 
@@ -317,9 +472,10 @@ function clearSelectedContact() {
   elements.contactSearchWrapper.classList.remove('hidden');
   elements.inputContactSearch.value = '';
   elements.inputContactSearch.focus();
+  updateLivePreview();
 }
 
-// Render Autocomplete Dropdown
+// Contact Autocomplete Search
 let searchDebounceTimer = null;
 elements.inputContactSearch?.addEventListener('input', () => {
   const query = elements.inputContactSearch.value.trim();
@@ -341,7 +497,6 @@ function renderAutocompleteDropdown(matches, query) {
   state.focusedAutocompleteIdx = -1;
 
   if (matches.length === 0) {
-    // If no contact matched but user typed numbers, offer to use as direct number
     const cleanNumbers = query.replace(/[^0-9]/g, '');
     if (cleanNumbers.length >= 7) {
       const item = document.createElement('div');
@@ -350,13 +505,14 @@ function renderAutocompleteDropdown(matches, query) {
         <div class="autocomplete-item-left">
           <div class="autocomplete-avatar">📞</div>
           <div class="autocomplete-info">
-            <span class="autocomplete-name">Use Phone Number: +${cleanNumbers}</span>
+            <span class="autocomplete-name">Use Phone: +${cleanNumbers}</span>
             <span class="autocomplete-phone">Click to select</span>
           </div>
         </div>
         <span class="autocomplete-badge">Direct Number</span>
       `;
       item.onclick = () => {
+        sound.playClick();
         selectContact({
           name: `+${cleanNumbers}`,
           phone: `+${cleanNumbers}`,
@@ -395,6 +551,7 @@ function renderAutocompleteDropdown(matches, query) {
     `;
 
     item.addEventListener('click', () => {
+      sound.playClick();
       selectContact(c);
     });
 
@@ -452,10 +609,76 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// Clear Contact Button Listener
 elements.btnClearContact?.addEventListener('click', clearSelectedContact);
 
-// Connect to Server-Sent Events (SSE)
+// Templates API Management
+async function fetchTemplates() {
+  try {
+    const res = await fetch('/api/templates');
+    const data = await res.json();
+    state.templates = data;
+    renderTemplateChips();
+  } catch (err) {
+    console.error('Failed to load templates:', err);
+  }
+}
+
+function renderTemplateChips() {
+  if (!elements.templateChipsContainer) return;
+  elements.templateChipsContainer.innerHTML = '';
+
+  const builtInIds = ['meeting', 'birthday', 'followup', 'checkin', 'urgent', 'standup'];
+
+  state.templates.forEach(t => {
+    const chip = document.createElement('div');
+    chip.className = 'chip-btn';
+    const isCustom = !builtInIds.includes(t.id);
+
+    chip.innerHTML = `
+      <span>${escapeHtml(t.title)}</span>
+      ${isCustom ? `<button type="button" class="chip-delete-btn" title="Delete template" onclick="event.stopPropagation(); deleteCustomTemplate('${t.id}')">✕</button>` : ''}
+    `;
+
+    chip.addEventListener('click', () => {
+      elements.inputMessage.value = t.content;
+      updateCharCounter();
+      updateLivePreview();
+      sound.playClick();
+      showToast(`Template applied: ${t.title}`, 'info', 2000);
+      elements.inputMessage.focus();
+    });
+
+    elements.templateChipsContainer.appendChild(chip);
+  });
+}
+
+window.deleteCustomTemplate = async function(id) {
+  if (!confirm('Are you sure you want to delete this custom template?')) return;
+  try {
+    const res = await fetch(`/api/templates/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      sound.playClick();
+      showToast('Template deleted', 'info');
+      fetchTemplates();
+    }
+  } catch (err) {
+    showToast('Failed to delete template', 'error');
+  }
+};
+
+// Dynamic Variable Insertion Chips
+document.querySelectorAll('.var-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tag = btn.dataset.var;
+    if (!tag) return;
+    insertTextAtCursor(elements.inputMessage, tag);
+    updateCharCounter();
+    updateLivePreview();
+    sound.playClick();
+  });
+});
+
+// Real-Time Connect via Server-Sent Events (SSE)
 function setupSSE() {
   const eventSource = new EventSource('/api/events');
 
@@ -467,6 +690,7 @@ function setupSSE() {
       renderConnectionStatus();
 
       if (prevStatus !== 'connected' && data.status === 'connected') {
+        sound.playSent();
         showToast(`WhatsApp connected as ${data.user?.phone || 'account'}!`, 'success');
       }
     } catch (err) {
@@ -517,7 +741,16 @@ function setupSSE() {
       renderMetrics();
 
       if (item.status === 'sent') {
+        sound.playSent();
         showToast(`Delivered message to ${item.recipientName || item.recipient}!`, 'success');
+
+        // Trigger native desktop notification if active
+        if (state.notificationsEnabled && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          new Notification('WhatsApp Delivered ✓', {
+            body: `Sent to ${item.recipientName || item.recipient}: "${item.message.slice(0, 45)}..."`,
+            icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%2325D366"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>'
+          });
+        }
       } else if (item.status === 'failed') {
         showToast(`Failed to deliver message to ${item.recipient}: ${item.error || 'Error'}`, 'error');
       }
@@ -535,6 +768,10 @@ function setupSSE() {
     } catch (err) {
       console.error('SSE delete error:', err);
     }
+  });
+
+  eventSource.addEventListener('queue_reset', () => {
+    fetchMessages();
   });
 
   eventSource.onerror = () => {
@@ -560,40 +797,39 @@ function renderMetrics() {
   elements.countFailed.textContent = failed;
 }
 
-// Calculate countdown string
+// Countdown Calculation Helper
 function getCountdownText(targetIso, status) {
-  if (status === 'sent') return 'Delivered';
-  if (status === 'failed') return 'Failed';
-  if (status === 'sending') return 'Sending now...';
+  if (status === 'sent') return 'Delivered ✓';
+  if (status === 'failed') return 'Failed ⚠️';
+  if (status === 'sending') return '⚡ Sending...';
 
-  const diffMs = new Date(targetIso).getTime() - Date.now();
-  if (diffMs <= 0) return 'Due for dispatch...';
+  const now = new Date().getTime();
+  const target = new Date(targetIso).getTime();
+  const diffSec = Math.floor((target - now) / 1000);
 
-  const seconds = Math.floor((diffMs / 1000) % 60);
-  const minutes = Math.floor((diffMs / (1000 * 60)) % 60);
-  const hours = Math.floor((diffMs / (1000 * 60 * 60)) % 24);
-  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (days > 0) return `In ${days}d ${hours}h`;
-  if (hours > 0) return `In ${hours}h ${minutes}m`;
-  if (minutes > 0) return `In ${minutes}m ${seconds}s`;
-  return `In ${seconds}s`;
+  if (diffSec <= 0) return '⚡ Due now';
+  if (diffSec < 60) return `⏱ in ${diffSec}s`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `⏱ in ${diffMin}m`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `⏱ in ${diffHours}h ${diffMin % 60}m`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `⏱ in ${diffDays}d ${diffHours % 24}h`;
 }
 
-// Render Scheduled Messages List
+// Render Scheduled Messages
 function renderMessages() {
   let list = [...state.messages];
 
-  // Filter tab
-  if (state.activeFilter === 'pending') {
-    list = list.filter(m => m.status === 'pending' || m.status === 'sending');
-  } else if (state.activeFilter === 'sent') {
-    list = list.filter(m => m.status === 'sent');
-  } else if (state.activeFilter === 'failed') {
-    list = list.filter(m => m.status === 'failed');
+  // Filter Tab
+  if (state.activeFilter !== 'all') {
+    list = list.filter(m => {
+      if (state.activeFilter === 'pending') return m.status === 'pending' || m.status === 'sending';
+      return m.status === state.activeFilter;
+    });
   }
 
-  // Search query
+  // Search Filter
   if (state.searchQuery) {
     const q = state.searchQuery.toLowerCase();
     list = list.filter(m => 
@@ -645,6 +881,10 @@ function createMessageCardHtml(item) {
     ? `<span class="repeat-badge">🔁 ${escapeHtml(item.repeat)}</span>` 
     : '';
 
+  const mediaTag = item.mediaUrl 
+    ? `<div class="field-hint" style="color: #60a5fa; margin-top: 0.25rem;">🖼️ Includes Photo Attachment</div>` 
+    : '';
+
   const sendNowBtn = item.status === 'pending' || item.status === 'failed'
     ? `<button class="action-btn action-btn-send" onclick="sendNow('${item.id}')" title="Send immediately">⚡ Send Now</button>`
     : '';
@@ -656,6 +896,8 @@ function createMessageCardHtml(item) {
   const retryBtn = item.status === 'failed'
     ? `<button class="action-btn action-btn-send" onclick="retryMessage('${item.id}')" title="Retry sending">🔄 Retry</button>`
     : '';
+
+  const duplicateBtn = `<button class="action-btn btn-action-duplicate" onclick="duplicateMessage('${item.id}')" title="Copy to composer to edit or re-schedule">📋 Duplicate</button>`;
 
   return `
     <div class="message-card status-${item.status}" id="msg-card-${item.id}">
@@ -674,6 +916,7 @@ function createMessageCardHtml(item) {
       </div>
 
       <div class="msg-content-preview">${escapeHtml(item.message)}</div>
+      ${mediaTag}
 
       ${item.error ? `<div class="field-hint" style="color: #f87171;">⚠️ ${escapeHtml(item.error)}</div>` : ''}
 
@@ -685,6 +928,7 @@ function createMessageCardHtml(item) {
         </div>
 
         <div class="card-actions-row">
+          ${duplicateBtn}
           ${sendNowBtn}
           ${retryBtn}
           ${editBtn}
@@ -695,7 +939,7 @@ function createMessageCardHtml(item) {
   `;
 }
 
-// Tick loop to update countdown labels in real-time
+// Real-Time Countdown Ticker
 setInterval(() => {
   for (const item of state.messages) {
     const el = document.getElementById(`countdown-${item.id}`);
@@ -705,12 +949,39 @@ setInterval(() => {
   }
 }, 1000);
 
+// Action: Duplicate to Composer
+window.duplicateMessage = function(id) {
+  const item = state.messages.find(m => m.id === id);
+  if (!item) return;
+
+  elements.inputRecipient.value = item.recipient;
+  elements.inputRecipientName.value = item.recipientName || '';
+  elements.inputContactSearch.value = item.recipientName ? `${item.recipientName} (${item.recipient})` : item.recipient;
+  elements.inputMessage.value = item.message;
+  if (elements.inputMediaUrl) {
+    elements.inputMediaUrl.value = item.mediaUrl || '';
+  }
+
+  updateCharCounter();
+  updateLivePreview();
+
+  // Highlight composer card with smooth scroll
+  elements.composerCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  elements.composerCard.classList.remove('flash-composer');
+  void elements.composerCard.offsetWidth; // trigger reflow
+  elements.composerCard.classList.add('flash-composer');
+
+  sound.playClick();
+  showToast('Message loaded into composer! Ready to edit or re-schedule.', 'info');
+};
+
 // Actions: Send Now
 window.sendNow = async function(id) {
   try {
     const res = await fetch(`/api/messages/${id}/send-now`, { method: 'POST' });
     const data = await res.json();
     if (res.ok) {
+      sound.playClick();
       showToast('Dispatching message right now...', 'info');
     } else {
       showToast(data.error || 'Failed to dispatch message', 'error');
@@ -726,6 +997,7 @@ window.retryMessage = async function(id) {
     const res = await fetch(`/api/messages/${id}/retry`, { method: 'POST' });
     const data = await res.json();
     if (res.ok) {
+      sound.playClick();
       showToast('Message queued for retry!', 'info');
     } else {
       showToast(data.error || 'Failed to retry', 'error');
@@ -741,6 +1013,7 @@ window.deleteMessage = async function(id) {
   try {
     const res = await fetch(`/api/messages/${id}`, { method: 'DELETE' });
     if (res.ok) {
+      sound.playClick();
       showToast('Scheduled message removed', 'info');
     } else {
       showToast('Failed to remove message', 'error');
@@ -750,7 +1023,7 @@ window.deleteMessage = async function(id) {
   }
 };
 
-// Actions: Edit Modal
+// Edit Modal Management
 window.openEditModal = function(id) {
   const item = state.messages.find(m => m.id === id);
   if (!item) return;
@@ -772,28 +1045,31 @@ function closeEditModal() {
 elements.btnCloseEditModal.addEventListener('click', closeEditModal);
 elements.btnCancelEdit.addEventListener('click', closeEditModal);
 
+elements.editModal.addEventListener('click', (e) => {
+  if (e.target === elements.editModal) closeEditModal();
+});
+
 elements.editMessageForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = elements.editMessageId.value;
-  const payload = {
-    recipient: elements.editRecipient.value.trim(),
-    recipientName: elements.editRecipientName.value.trim(),
-    message: elements.editMessage.value.trim(),
-    scheduledAt: new Date(elements.editScheduleDatetime.value).toISOString(),
-    repeat: elements.editRepeat.value
-  };
+  const recipient = elements.editRecipient.value.trim();
+  const recipientName = elements.editRecipientName.value.trim();
+  const message = elements.editMessage.value.trim();
+  const scheduledAt = new Date(elements.editScheduleDatetime.value).toISOString();
+  const repeat = elements.editRepeat.value;
 
   try {
     const res = await fetch(`/api/messages/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ recipient, recipientName, message, scheduledAt, repeat })
     });
+    const data = await res.json();
     if (res.ok) {
-      showToast('Scheduled message updated!', 'success');
+      sound.playClick();
+      showToast('Message updated successfully!', 'success');
       closeEditModal();
     } else {
-      const data = await res.json();
       showToast(data.error || 'Failed to update message', 'error');
     }
   } catch (err) {
@@ -801,25 +1077,61 @@ elements.editMessageForm.addEventListener('submit', async (e) => {
   }
 });
 
-// Event Listeners: Templates Chips
-elements.templateChipsContainer.addEventListener('click', (e) => {
-  const btn = e.target.closest('.chip-btn');
-  if (!btn) return;
-  const templateKey = btn.dataset.template;
-  if (TEMPLATES[templateKey]) {
-    elements.inputMessage.value = TEMPLATES[templateKey];
-    updateCharCounter();
-    elements.inputMessage.focus();
-    showToast(`Template applied: ${btn.textContent}`, 'info', 2000);
+// Custom Template Modal Management
+elements.btnOpenTemplateModal?.addEventListener('click', () => {
+  // Pre-fill template content with whatever is in composer if typed
+  const curMsg = elements.inputMessage.value.trim();
+  if (curMsg && elements.templateContentInput) {
+    elements.templateContentInput.value = curMsg;
+  }
+  elements.templateModal.classList.remove('hidden');
+  elements.templateTitleInput.focus();
+});
+
+function closeTemplateModal() {
+  elements.templateModal.classList.add('hidden');
+  elements.customTemplateForm.reset();
+}
+
+elements.btnCloseTemplateModal?.addEventListener('click', closeTemplateModal);
+elements.btnCancelTemplate?.addEventListener('click', closeTemplateModal);
+
+elements.templateModal?.addEventListener('click', (e) => {
+  if (e.target === elements.templateModal) closeTemplateModal();
+});
+
+elements.customTemplateForm?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const title = elements.templateTitleInput.value.trim();
+  const content = elements.templateContentInput.value.trim();
+  if (!title || !content) return;
+
+  try {
+    const res = await fetch('/api/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, content })
+    });
+    if (res.ok) {
+      sound.playClick();
+      showToast('Custom template saved!', 'success');
+      closeTemplateModal();
+      fetchTemplates();
+    } else {
+      showToast('Failed to save template', 'error');
+    }
+  } catch (err) {
+    showToast('Network error saving template', 'error');
   }
 });
 
-// Event Listeners: Emojis & Formatting
+// Event Listeners: Emojis & Formatting Toolbar
 document.querySelectorAll('.emoji-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const emoji = btn.dataset.emoji;
     insertTextAtCursor(elements.inputMessage, emoji);
     updateCharCounter();
+    updateLivePreview();
   });
 });
 
@@ -828,12 +1140,13 @@ document.querySelectorAll('.syntax-btn').forEach(btn => {
     const wrap = btn.dataset.wrap;
     wrapSelection(elements.inputMessage, wrap);
     updateCharCounter();
+    updateLivePreview();
   });
 });
 
 function insertTextAtCursor(input, text) {
-  const start = input.selectionStart;
-  const end = input.selectionEnd;
+  const start = input.selectionStart || 0;
+  const end = input.selectionEnd || 0;
   const val = input.value;
   input.value = val.substring(0, start) + text + val.substring(end);
   input.selectionStart = input.selectionEnd = start + text.length;
@@ -841,8 +1154,8 @@ function insertTextAtCursor(input, text) {
 }
 
 function wrapSelection(input, wrapper) {
-  const start = input.selectionStart;
-  const end = input.selectionEnd;
+  const start = input.selectionStart || 0;
+  const end = input.selectionEnd || 0;
   const val = input.value;
   const selected = val.substring(start, end);
   const replacement = `${wrapper}${selected || 'text'}${wrapper}`;
@@ -852,12 +1165,19 @@ function wrapSelection(input, wrapper) {
   input.focus();
 }
 
-// Character Counter
+// Character Counter & Live Preview Listeners
 function updateCharCounter() {
   const len = elements.inputMessage.value.length;
   elements.charCounter.textContent = `${len} char${len === 1 ? '' : 's'}`;
 }
-elements.inputMessage.addEventListener('input', updateCharCounter);
+
+elements.inputMessage.addEventListener('input', () => {
+  updateCharCounter();
+  updateLivePreview();
+});
+
+elements.inputMediaUrl?.addEventListener('input', updateLivePreview);
+elements.inputScheduleDatetime.addEventListener('change', updateLivePreview);
 
 // Time Preset Buttons
 elements.timePresetsGroup.addEventListener('click', (e) => {
@@ -880,6 +1200,9 @@ elements.timePresetsGroup.addEventListener('click', (e) => {
     const minutes = parseInt(offset, 10);
     setDefaultScheduleDate(minutes);
   }
+
+  sound.playClick();
+  updateLivePreview();
 });
 
 // Form Submit: Schedule Message
@@ -902,21 +1225,17 @@ elements.btnSendTest.addEventListener('click', async () => {
 async function handleScheduleSubmit(sendImmediately) {
   let recipient = elements.inputRecipient.value.trim();
   let recipientName = elements.inputRecipientName.value.trim();
+  const mediaUrl = elements.inputMediaUrl?.value.trim() || null;
 
-  // If user didn't pick from dropdown, check if they typed a name or phone into search box
+  // Support multiple comma-separated entries in search box or direct typed numbers
   if (!recipient && elements.inputContactSearch?.value.trim()) {
     const query = elements.inputContactSearch.value.trim();
-    // Check if matching contact in state.contacts
     const exactMatch = state.contacts.find(c => (c.name || '').toLowerCase() === query.toLowerCase());
     if (exactMatch) {
       recipient = exactMatch.phone || exactMatch.jid;
       recipientName = exactMatch.name;
     } else {
-      const cleanDigits = query.replace(/[^0-9]/g, '');
-      if (cleanDigits.length >= 7) {
-        recipient = `+${cleanDigits}`;
-        recipientName = query;
-      }
+      recipient = query;
     }
   }
 
@@ -941,6 +1260,7 @@ async function handleScheduleSubmit(sendImmediately) {
     recipient,
     recipientName,
     message,
+    mediaUrl,
     scheduledAt,
     repeat,
     sendImmediately
@@ -960,17 +1280,20 @@ async function handleScheduleSubmit(sendImmediately) {
     }
 
     if (sendImmediately) {
-      showToast('Dispatching test message right now...', 'success');
+      sound.playSent();
+      showToast('Dispatching message right now...', 'success');
     } else {
+      sound.playSchedule();
       showToast('Message successfully scheduled!', 'success');
     }
 
-    // Reset form fields
+    // Reset Form Fields
     elements.inputMessage.value = '';
+    if (elements.inputMediaUrl) elements.inputMediaUrl.value = '';
     updateCharCounter();
     setDefaultScheduleDate(5);
     clearSelectedContact();
-    fetchContacts(); // Refresh contact usage list
+    fetchContacts();
 
   } catch (err) {
     showToast('Network error while scheduling message', 'error');
@@ -994,6 +1317,68 @@ elements.searchInput.addEventListener('input', (e) => {
   renderMessages();
 });
 
+// CSV Export
+elements.btnExportCsv?.addEventListener('click', () => {
+  sound.playClick();
+  window.location.href = '/api/messages/export/csv';
+  showToast('Exporting message logs to CSV...', 'info');
+});
+
+// Purge Sent & Failed Messages
+elements.btnClearHistory?.addEventListener('click', async () => {
+  if (!confirm('Are you sure you want to clear all delivered and failed messages from your queue? (Pending scheduled messages will be preserved)')) return;
+  try {
+    const res = await fetch('/api/messages/clear-sent', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      sound.playClick();
+      showToast(`Cleaned up ${data.removedCount} past messages from queue!`, 'success');
+      fetchMessages();
+    } else {
+      showToast('Failed to clear history', 'error');
+    }
+  } catch (err) {
+    showToast('Network error clearing history', 'error');
+  }
+});
+
+// Sound Toggle
+elements.btnSoundToggle?.addEventListener('click', () => {
+  state.soundEnabled = !state.soundEnabled;
+  localStorage.setItem('wa_sound_enabled', state.soundEnabled);
+  elements.soundIcon.textContent = state.soundEnabled ? '🔊' : '🔇';
+  elements.btnSoundToggle.title = state.soundEnabled ? 'Sound Chimes: Enabled' : 'Sound Chimes: Muted';
+  if (state.soundEnabled) {
+    elements.btnSoundToggle.classList.add('active');
+    sound.playClick();
+    showToast('Sound effects enabled 🔊', 'info');
+  } else {
+    elements.btnSoundToggle.classList.remove('active');
+    showToast('Sound effects muted 🔇', 'info');
+  }
+});
+
+// Desktop Notification Toggle
+elements.btnNotifyToggle?.addEventListener('click', async () => {
+  if (typeof Notification === 'undefined') {
+    showToast('Desktop notifications are not supported in this browser', 'error');
+    return;
+  }
+  if (Notification.permission === 'granted') {
+    showToast('Desktop notifications are active! 🔔', 'info');
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if (perm === 'granted') {
+    state.notificationsEnabled = true;
+    elements.btnNotifyToggle.classList.add('active');
+    sound.playClick();
+    showToast('Desktop notifications activated! 🔔', 'success');
+  } else {
+    showToast('Desktop notification permission was denied', 'info');
+  }
+});
+
 // Device Modal Handling
 elements.btnDeviceModal.addEventListener('click', () => {
   elements.deviceModal.classList.remove('hidden');
@@ -1003,7 +1388,6 @@ elements.btnCloseModal.addEventListener('click', () => {
   elements.deviceModal.classList.add('hidden');
 });
 
-// Close modal on click outside dialog
 elements.deviceModal.addEventListener('click', (e) => {
   if (e.target === elements.deviceModal) {
     elements.deviceModal.classList.add('hidden');
@@ -1104,4 +1488,13 @@ setDefaultScheduleDate(5);
 fetchStatus();
 fetchMessages();
 fetchContacts();
+fetchTemplates();
 setupSSE();
+
+// Sync initial toggle UI
+if (state.soundEnabled && elements.btnSoundToggle) {
+  elements.btnSoundToggle.classList.add('active');
+}
+if (state.notificationsEnabled && elements.btnNotifyToggle) {
+  elements.btnNotifyToggle.classList.add('active');
+}
